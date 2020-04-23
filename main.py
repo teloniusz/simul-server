@@ -1,51 +1,94 @@
 import json
+from .config import ConfigReader
+from .app import MainApp
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
-class ForkHandler(BaseHTTPRequestHandler):
-    def do_HEAD(self):
-        self.send_response(200)
-        self.send_header("Content-type", "text/html")
+class WSGIHandler:
+    class Response:
+        def __init__(self, code, ctype, content, head=False):
+            self.headers = []
+            self.body = ''
+            content = content.encode('utf-8')
+            self.code = code
+            self.headers.append(("Content-type", ctype + '; charset=utf-8'))
+            if content or not head:
+                self.headers.append(("Content-length", len(content)))
+            if not head:
+                self.body = content
+
+        def send(self, start_response):
+            start_response(self.code, self.headers)
+            return self.body
+
+
+    def __init__(self):
+        self.config = ConfigReader()
+        self.app = MainApp(self.config)
+
+    def get_response(self, method, path, reader):
+        if method != 'POST':
+            return Response('405 Method Not Allowed', 'text/plain', 'Bad request method')
+        json_input = reader.read()
+        try:
+            args = json.loads(json_input.decode('utf-8'))
+        except UnicodeDecodeError:
+            return Response('400 Bad Request', 'text/plain', 'Invalid unicode input')
+        if type(args_input) != list:
+            return Response('400 Bad Request', 'text/plain', 'Invalid JSON input (expecting op argument array)')
+        result = self.app.handle_request(self.path[1:], *args)
+        return Response(200, 'application/javascript', json.dumps(result))
+
+    def __call__(self, environ, start_response):
+        method = environ['REQUEST_METHOD']
+        path = environ['PATH_INFO']
+        reader = environ['wsgi.input']
+
+        return [self.get_response(method, path, reader).send(start_response)]
+
+
+class HTTPHandler(BaseHTTPRequestHandler):
+    def __init__(self, *args, **kwargs):
+        self.config = ConfigReader()
+        self.app = MainApp(self.config)
+        super().__init__(*args, **kwargs)
+
+    def valid_json(self):
+        json_input = self.rfile.read()
+        try:
+            args_input = json.loads(json_input.decode('utf-8'))
+        except UnicodeDecodeError:
+            return 'Invalid unicode input'
+        if type(args_input) != list:
+            return 'Invalid JSON input (expecting op argument array)')
+        return args_input
+
+    def return_response(self, code, ctype, content, head=False):
+        content = content.encode('utf-8')
+        self.send_response(code)
+        self.send_header("Content-type", ctype + '; charset=utf-8')
+        if content or not head:
+            self.send_header("Content-length", len(content))
         self.end_headers()
+        if not head:
+            self.wfile.write(content)
 
-    def do_GET(self):
-        """Respond to a GET request."""
-        #self.send_response(200)
-        #self.send_header("Content-type", "application/json")
-        #self.end_headers()
-        #self.wfile.write("<html><head><title>Title goes here.</title></head>")
-        #self.wfile.write("<body><p>This is a test.</p>")
+    def do_POST(self):
+        """Respond to a POST request."""
 
-        # If someone went to "http://something.somewhere.net/foo/bar/",
-        # then self.path equals "/foo/bar/".
-        # self.wfile.write("<p>You accessed path: %self</p>" % self.path)
-        # self.wfile.write("</body></html>")
-
-        if self.path in ('/start', '/status', '/cancel'):
-            try:
-                result = {"response": self.handle_fork(self.path[1:])}
-            except Exception as ex:
-                result = {"error": str(ex)}
-            resp = json.dumps(result).encode('utf-8')
-            self.send_response(200)
-            self.send_header("Content-type", "application/javascript")
-            self.send_header("Content-length", len(resp))
-            self.end_headers()
-            self.wfile.write(resp)
+        args = self.valid_json()
+        if type(args) == str:
+            self.return_response(400, 'text/plain', args)
         else:
-            self.send_response(404)
-            self.send_header("Content-type", "text/html")
-            self.end_headers()
-            self.wfile.write("<html><head><title>Not found.</title></head>".encode('utf-8'))
-            self.wfile.write(("<body><p>Operation not found: %s.</p></body>" % self.path).encode('utf-8'))
+            result = self.app.handle_request(self.path[1:], *args)
+            self.return_response(200, 'application/javascript', json.dumps(result))
 
-    def handle_fork(self, op):
-        return {}
 
+app = WSGIHandler()
 
 
 if __name__ == '__main__':
-    httpd = ThreadingHTTPServer(('0.0.0.0', 8000), ForkHandler)
+    httpd = ThreadingHTTPServer(('0.0.0.0', 8000), HTTPHandler)
     try:
         print("Serving: http://localhost:8000/")
         httpd.serve_forever()
