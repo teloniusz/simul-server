@@ -1,0 +1,2 @@
+server_name: test server
+command: ['ls', '-lR']

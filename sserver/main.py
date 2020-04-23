@@ -60,7 +60,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
         except UnicodeDecodeError:
             return 'Invalid unicode input'
         if type(args_input) != list:
-            return 'Invalid JSON input (expecting op argument array)')
+            return 'Invalid JSON input (expecting op argument array)'
         return args_input
 
     def return_response(self, code, ctype, content, head=False):
