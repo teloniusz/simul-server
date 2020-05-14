@@ -1,23 +1,25 @@
 from collections import namedtuple
 
 
-OPX = namedtuple('OPX', [
-    'UNKNOWN_OP', 'PROCESS_RUNNING', 'PROCESS_NOTRUNNING',
-    'PROCESS_EXCEPTION', 'START_ERROR', 'PROCESS_ERROR']
-)(
-    'Unknown operation: {}',
-    'Process is already running',
-    'Process is not running',
-    '{}: {}',
-    'Process start error',
-    'Process error'
+_OPX_MSG = (
+    ('UNKNOWN_OP', 'Unknown operation: {}'),
+    ('PROCESS_RUNNING', 'Process is already running'),
+    ('PROCESS_NOTRUNNING', 'Process is not running'),
+    ('PROCESS_EXCEPTION', '{}: {}'),
+    ('START_ERROR', 'Process start error'),
+    ('PROCESS_ERROR', 'Process error')
 )
 
 
-class OpException:
+OPX = namedtuple('OPX', [code for code, msg in _OPX_MSG])(*range(len(_OPX_MSG)))
+
+
+
+
+class OpException(Exception):
     def __init__(self, code, *args, exception=None):
         self.code = code
-        self.msg = self.OPX[code].format(*args)
+        self.msg = _OPX_MSG[code][1].format(*args)
         self.exception=exception
 
     def __str__(self):

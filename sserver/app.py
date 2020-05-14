@@ -1,3 +1,4 @@
+import traceback
 from .errors import OPX, OpException
 from .process import ProcessController
 
@@ -10,7 +11,7 @@ class MainApp:
             self.command = config['command']
         except KeyError:
             raise Exception('Misconfiguration: server_name and command must be defined')
-        self.controller = ProcessController(self.command)
+        self.controller = ProcessController.get_controller(self.command)
 
     def handle_request(self, op, *params):
         result = {
@@ -28,7 +29,7 @@ class MainApp:
 
     def run_request(self, op, *params):
         try:
-            op = getattr(self, 'op_' + op)
+            op = getattr(self, 'do_' + op)
         except AttributeError:
             raise OpException(OPX.UNKNOWN_OP, op)
         try:
@@ -36,6 +37,7 @@ class MainApp:
         except OpException:
             raise
         except Exception as ex:
+            traceback.print_exc()
             raise OpException(OPX.PROCESS_EXCEPTION, ex.__class__.__name__, str(ex))
         return result
 
@@ -63,14 +65,14 @@ class MainApp:
     def do_get_output(self, *params):
         if not self.controller.start_ts:
             raise OpException(OPX.PROCESS_NOTRUNNING)
-        last_line = [0, 0]
+        last_lines = []
         if len(params):
             try:
                 last_lines = [int(params[0]), int(params[1])]
             except (ValueError, IndexError):
                 raise ValueError('Last lines (stdout, sterr) number expected')
 
-        return {'lines': self.controller.fetch_lines(last_lines)}
+        return self.controller.fetch_lines(last_lines)
 
     def do_kill(self, *params):
         if not self.controller.start_ts:

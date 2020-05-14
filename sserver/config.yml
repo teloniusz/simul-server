@@ -1,2 +1,7 @@
 server_name: test server
-command: ['ls', '-lR']
+command:
+  #  - stdbuf
+  #- '-oL'
+  #- '-eL'
+  - python
+  - sserver/output_test.py
